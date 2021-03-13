@@ -2,6 +2,7 @@ import { Box, Button, Flex, Link } from '@chakra-ui/react';
 import React from 'react';
 import NextLink from "next/link";
 import { useLogoutMutation, useMeQuery } from '../generated/graphql';
+import { isServer } from '../utils/isServer';
 
 
 interface NavBarProps{
@@ -13,7 +14,11 @@ const NavBar: React.FC<NavBarProps> = ({})=>{
 
     const [{fetching: logoutFetching},logout] = useLogoutMutation();
 
-    const [{data,fetching}] = useMeQuery();
+    const [{data,fetching}] = useMeQuery({
+        pause: isServer(),
+    });
+
+    // console.log("data:",data);
 
     /* We actually have three states
         if we are loading , if the user is logged in, if the user is not logged in

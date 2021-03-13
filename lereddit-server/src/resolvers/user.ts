@@ -2,12 +2,18 @@ import { User } from '../entities/User'
 import { MyContext } from 'src/types'
 import {Arg, Ctx, Field, InputType, Mutation, ObjectType, Query} from 'type-graphql'
 import argon2 from 'argon2';
-import { COOKIE_NAME } from '../constant';
+import { COOKIE_NAME, FORGET_PASSWORD_PREFIX } from '../constant';
+import { sendEmail } from '../utils/sendEmail';
+import { v4 } from "uuid";
+//import { RedisClient } from 'redis';
 
 @InputType()
 class UsernamePasswordInput{
     @Field()
     username:string
+
+    @Field()
+    email: string;
 
     @Field()
     password:string
@@ -60,6 +66,105 @@ class UserResponse{
 
 export class UserResolver{
 
+    @Mutation(() => UserResponse)
+    async changePassword(
+        @Arg('token') token: string,
+        @Arg('newPassword') newPassword: string,
+        @Ctx() ctx:MyContext
+    ): Promise<UserResponse> {
+        if(newPassword.length <= 3){
+            return{
+                errors:[
+                    {
+                        field:"newPassword",
+                        message:"length must be greater than 3"
+                    },
+                ],
+            };
+        }
+
+        const key = FORGET_PASSWORD_PREFIX + token;
+
+        const userId = await ctx.redisClient.get(key);
+        if(!userId){
+            return{
+                errors:[
+                    {
+                        field:"token",
+                        message:"token expired"
+                    },
+                ],
+            };
+        }
+
+
+
+        // Since redisClient (ioredis) stores all its values in string so, we need to convert it into int
+        const user = await ctx.em.findOne(User,{id: parseInt(userId)});
+
+        // For some reason the user was deleted in the middle of there Forgot Password
+        if(!user){
+            return{
+                errors:[{
+                    field:"token",
+                    message:"user no longer exists"
+
+                }]
+            };
+        }
+
+        user.password = await argon2.hash(newPassword);
+
+        // save it to database
+        await ctx.em.persistAndFlush(user);
+
+
+        /**
+         * Here we are deleting the token stored in redis so, that
+         * they cannot changePassword twice after with that same token stored
+         */
+        await ctx.redisClient.del(key)
+
+
+        // store user id session
+        // this will set a cookie on the user
+        // log in user after change password
+        ctx.req.session.userId = user.id;
+
+        return {
+            user
+        }
+
+    }
+
+
+    @Mutation(() => Boolean)
+    async forgotPassword(
+        @Arg('email') email: string,
+        @Ctx() ctx:MyContext 
+    ){
+        const user = await ctx.em.findOne(User,{ email });
+
+        if(!user){
+            // the email is not in database
+            return true; // For security
+            /**
+             * Some you don't want to tell the user that the email doesn't exist
+             * The reason being just for security that way they won't phish through
+             * entire user trying to forgot password on every single one or something like that
+             */
+        }
+
+        // token helps us to validate who they are during resetting their password
+        const token = v4(); // It will give us a random string
+
+        await ctx.redisClient.set(FORGET_PASSWORD_PREFIX + token,user.id,'ex',1000 * 60 * 60 * 24 * 3) //  we are giving them time upto 3 days 
+
+        await sendEmail(email,`<a href="http://localhost:3000/change-password/${token}">Reset Password</a>`);
+
+        return true
+    }
+
     // Returns the current user and if not logged in then return null
     @Query(() => User,{nullable:true})
     async me(@Ctx() ctx:MyContext){
@@ -87,6 +192,18 @@ export class UserResolver{
         @Arg('options',()=> UsernamePasswordInput) options:UsernamePasswordInput,
         @Ctx() ctx:MyContext
     ):Promise<UserResponse>{
+
+        if(!options.email.includes("@")){
+            return{
+                errors:[
+                    {
+                        field:"email",
+                        message:"invalid email"
+                    },
+                ],
+            };
+        }
+
         if(options.username.length <= 2){
             return{
                 errors:[
@@ -111,29 +228,45 @@ export class UserResolver{
 
         // Hashing the pasword using argon2
         const hashedPassword = await argon2.hash(options.password);
-        const user = ctx.em.create(User,{username:options.username,password:hashedPassword});
+        const user = ctx.em.create(User,{username: options.username, email: options.email , password:hashedPassword});
         
         
         // Error handling for registering an already registered user
         try{
             await ctx.em.persistAndFlush(user);
         }catch(err){
-            // duplicate username error . You can get more info by console.log("message: ",err.message)
-            if(err.code === "23505"){ // err.detail.include("already exists")
-                return{
-                    errors:[
-                        {
-                            field:"username",
-                            message:"username already exists"
-                        },
-                    ],
-                };
+            // duplicate username error . You can get more info by console.log("message: ",err)
+            console.log("message: ",err)
+            if(err.code === "23505"){ // err.detail.includes("already exists")
+
+                if(err.detail.includes("email")){
+                    return{
+                        errors:[
+                            {
+                                field:"email",
+                                message:"email already exists"
+                            },
+                        ],
+                    };
+                }
+
+                if(err.detail.includes("username")){
+                    return{
+                        errors:[
+                            {
+                                field:"username",
+                                message:"username already exists"
+                            },
+                        ],
+                    };
+                }
+                
             }
         }
 
         // store user id session
         // this will set a cookie on the user
-        // keep them logged in
+        // log in user after register
         ctx.req.session.userId = user.id;
 
 
@@ -165,18 +298,33 @@ export class UserResolver{
         @Arg('options',()=> UsernamePasswordInput) options:UsernamePasswordInput,
         @Ctx() ctx:MyContext
     ):Promise<UserResponse> {
-        const user = await ctx.em.findOne(User,{username:options.username})
-        if(!user){
+        
+
+        // Important for frontend so that nextjs could show appropriate errors
+        const userForUsername = await ctx.em.findOne(User,{username:options.username});
+        if(!userForUsername){
             return{
                 errors:[{
                     field:"username",
-                    message:"that username does not exist"
+                    message:"that username does not exist "
+
+                }]
+            };
+        }
+
+        // Important for frontend so that nextjs could show appropriate errors 
+        const userForEmail = await ctx.em.findOne(User,{email:options.email});
+        if(!userForEmail){
+            return{
+                errors:[{
+                    field:"email",
+                    message:"that email does not exist "
 
                 }]
             };
         }
         
-        const valid = await argon2.verify(user.password,options.password);
+        const valid = await argon2.verify(userForEmail.password,options.password);
         if(!valid){
             return{
                 errors:[{
@@ -188,13 +336,13 @@ export class UserResolver{
 
         // When successfully logged in, we make a userId property in session and set it to user.id
         // With this step, cookie is also created and saved in the browser
-        ctx.req.session.userId = user.id;
+        ctx.req.session.userId = userForEmail.id;
         // ctx.req.session.randomProperty = "Ben is cool";
 
 
         
         return {
-            user,
+            user: userForEmail,
         };
     }
     @Mutation(() => Boolean)

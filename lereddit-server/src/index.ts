@@ -8,12 +8,14 @@ import { HelloResolver } from "./resolvers/hello";
 import { PostResolver } from "./resolvers/post";
 import { UserResolver } from "./resolvers/user";
 
-import redis from 'redis';
+import Redis from 'ioredis';
 import session from 'express-session';
 import connectRedis from 'connect-redis';
 
 import cors from 'cors';
 import { MyContext } from "./types";
+//import { sendEmail } from "./utils/sendEmail";
+//import { User } from "./entities/User";
 
 
 
@@ -24,10 +26,17 @@ import { MyContext } from "./types";
  * If the promise rejects, the rejected value is thrown.
  */
 const main = async () =>{
+
+    // Checking testEmailAccount ( user and pass )
+    // sendEmail("bob@bob.com","Hello There");
+
     /**
      * connect to the database
      */
     const orm = await MikroORM.init(microConfig);
+
+    // Deleting all our users
+    // await orm.em.nativeDelete(User,{});
 
     /**
      * Run migrations
@@ -51,7 +60,13 @@ const main = async () =>{
 
 
     const RedisStore = connectRedis(session);
+    const redisClient = new Redis();
+    
+    /* import redis from 'redis';
     const redisClient = redis.createClient();
+    Instead of this we are using ioredis
+    */ 
+
     
     // cors will be applied to all the routes e.g '/' , '/register' etc.
     app.use(cors({
@@ -96,7 +111,7 @@ const main = async () =>{
          * context is a special object that is accessable by all resolvers (i.e HelloResolver,PostResolver)
          * with the help of @Ctx decorator
          */
-        context:({req,res}):MyContext => ({ em:orm.em,req,res })
+        context:({req,res}):MyContext => ({ em:orm.em,req,res, redisClient })
     });
 
     /**

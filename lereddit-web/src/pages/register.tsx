@@ -8,6 +8,8 @@ import { useMutation } from 'urql';
 import { useRegisterMutation } from '../generated/graphql';
 import { toErrorMap } from '../utils/toErrorMap';
 import {Router, useRouter} from 'next/router'
+import { withUrqlClient } from 'next-urql';
+import { createUrqlClient } from '../utils/createUrqlClient';
 
 
 interface registerProps{
@@ -59,7 +61,7 @@ const Register: React.FC<registerProps> = ({})=>{
     const [{},register] = useRegisterMutation();
     return(
         <Wrapper variant='small'>
-            <Formik initialValues={{username:"",password:""}} onSubmit={async (values,{setErrors}) =>{
+            <Formik initialValues={{username:"",email:"",password:""}} onSubmit={async (values,{setErrors}) =>{
                 //console.log(values);
                 const response = await register(values);
 
@@ -82,10 +84,19 @@ const Register: React.FC<registerProps> = ({})=>{
                                 <FormLabel htmlFor="username">Username</FormLabel>
                                 <Input value={values.username} onChange={handleChange} id="username" placeholder="username" />
                         </FormControl> */}
-                        <InputField name="username" placeholder="username" label="Username"/>
+                        <Box mt={4} >
+                            <InputField name="username" placeholder="username" label="Username"/>
+                        </Box>
+                        <Box mt={4} >
+                            <InputField name="email" placeholder="email" label="Email"/>
+                        </Box>
                         <Box mt={4} >
                             <InputField name="password" placeholder="password" label="Password" type="password"/>
                         </Box>
+                        {/* <InputField name="username" placeholder="username" label="Username"/>
+                        <Box mt={4} >
+                            <InputField name="password" placeholder="password" label="Password" type="password"/>
+                        </Box> */}
                         <Button mt={4} type="submit" isLoading={isSubmitting} colorScheme="teal">Register</Button>
                     </Form>
                 )}
@@ -94,4 +105,4 @@ const Register: React.FC<registerProps> = ({})=>{
     );
 }
 
-export default Register;
+export default withUrqlClient(createUrqlClient,{ssr:true})(Register);
