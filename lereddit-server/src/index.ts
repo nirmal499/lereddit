@@ -1,6 +1,7 @@
-import {MikroORM} from "@mikro-orm/core";
+import 'reflect-metadata';
+//import {MikroORM} from "@mikro-orm/core";
 import { COOKIE_NAME, __prod__ } from "./constant";
-import microConfig from './mikro-orm.config';
+//import microConfig from './mikro-orm.config';
 import express from 'express';
 import {ApolloServer} from 'apollo-server-express';
 import {buildSchema} from 'type-graphql'
@@ -12,11 +13,19 @@ import Redis from 'ioredis';
 import session from 'express-session';
 import connectRedis from 'connect-redis';
 
+import dotenv from 'dotenv';
+
 import cors from 'cors';
 import { MyContext } from "./types";
 //import { sendEmail } from "./utils/sendEmail";
 //import { User } from "./entities/User";
+import {createConnection} from 'typeorm'
+import { User } from "./entities/User";
+import { Post } from "./entities/Post";
 
+dotenv.config({
+    path:'config.env'
+})
 
 
 /**
@@ -33,7 +42,18 @@ const main = async () =>{
     /**
      * connect to the database
      */
-    const orm = await MikroORM.init(microConfig);
+
+    const conn = await createConnection({
+        type:'postgres',
+        database: 'lireddit',
+        username: 'postgres',
+        password: process.env.DBPASS,
+        logging:true,
+        synchronize:true, // No need to do migration ,it will automatically create tables (do the migrations for you)
+        entities:[Post,User]
+    })
+
+    //const orm = await MikroORM.init(microConfig);
 
     // Deleting all our users
     // await orm.em.nativeDelete(User,{});
@@ -41,7 +61,7 @@ const main = async () =>{
     /**
      * Run migrations
      */
-    await orm.getMigrator().up();
+    //await orm.getMigrator().up();
 
      /**
      * Run sql commands
@@ -111,7 +131,9 @@ const main = async () =>{
          * context is a special object that is accessable by all resolvers (i.e HelloResolver,PostResolver)
          * with the help of @Ctx decorator
          */
-        context:({req,res}):MyContext => ({ em:orm.em,req,res, redisClient })
+        context:({req,res}):MyContext => ({ req,res, redisClient })
+        //context:({req,res}):MyContext => ({ em:orm.em,req,res, redisClient })
+
     });
 
     /**

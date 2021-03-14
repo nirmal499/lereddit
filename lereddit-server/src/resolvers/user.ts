@@ -100,7 +100,9 @@ export class UserResolver{
 
 
         // Since redisClient (ioredis) stores all its values in string so, we need to convert it into int
-        const user = await ctx.em.findOne(User,{id: parseInt(userId)});
+        const userIdNum = parseInt(userId);
+        const user = await User.findOne(userIdNum);
+        //const user = await ctx.em.findOne(User,{id: parseInt(userId)});
 
         // For some reason the user was deleted in the middle of there Forgot Password
         if(!user){
@@ -113,10 +115,19 @@ export class UserResolver{
             };
         }
 
-        user.password = await argon2.hash(newPassword);
 
         // save it to database
-        await ctx.em.persistAndFlush(user);
+        await User.update(
+            {
+                id: userIdNum
+            },
+            {
+                password: await argon2.hash(newPassword)
+            }
+        );// we are updating password using id
+
+        //user.password = await argon2.hash(newPassword);
+        //await ctx.em.persistAndFlush(user);
 
 
         /**
@@ -143,7 +154,8 @@ export class UserResolver{
         @Arg('email') email: string,
         @Ctx() ctx:MyContext 
     ){
-        const user = await ctx.em.findOne(User,{ email });
+        const user = await User.findOne({ where: {email} } ); // Since email is not an PrimaryGeneratedColumn that's we used where
+        //const user = await ctx.em.findOne(User,{ email });
 
         if(!user){
             // the email is not in database
@@ -167,7 +179,7 @@ export class UserResolver{
 
     // Returns the current user and if not logged in then return null
     @Query(() => User,{nullable:true})
-    async me(@Ctx() ctx:MyContext){
+    /* async */ me(@Ctx() ctx:MyContext){
 
         // DO THIS TO GET MORE INFO ABOUT SESSION
         // console.log(req.session)
@@ -178,8 +190,18 @@ export class UserResolver{
         }
 
         // user is logged in, hence we search the user from database using it's id and return the user
-        const user = await ctx.em.findOne(User,{id:ctx.req.session.userId})
+        /* const user = await User.findOne(ctx.req.session.userId);
+           return user;
+        OR
+        In this we don't need to make the function async anymore, since we are returing Promise
+        */
+       return User.findOne(ctx.req.session.userId);
+        
+        /* const user = await ctx.em.findOne(User,{id:ctx.req.session.userId})
         return user;
+        OR
+        return ctx.em.findOne(User,{ id:ctx.req.session.userId}) // In this we don't need to make the function async anymore, since we are returing Promise
+        */
 
         // So, we are considering that if the user has a cookie that means they are logged in.
     }
@@ -228,15 +250,16 @@ export class UserResolver{
 
         // Hashing the pasword using argon2
         const hashedPassword = await argon2.hash(options.password);
-        const user = ctx.em.create(User,{username: options.username, email: options.email , password:hashedPassword});
-        
-        
+        const user  = User.create({username: options.username, email: options.email , password:hashedPassword});
+        // const user = ctx.em.create(User,{username: options.username, email: options.email , password:hashedPassword});
+
         // Error handling for registering an already registered user
         try{
-            await ctx.em.persistAndFlush(user);
+            await user.save();
+            //await ctx.em.persistAndFlush(user);
         }catch(err){
             // duplicate username error . You can get more info by console.log("message: ",err)
-            console.log("message: ",err)
+            // console.log("message: ",err)
             if(err.code === "23505"){ // err.detail.includes("already exists")
 
                 if(err.detail.includes("email")){
@@ -263,6 +286,30 @@ export class UserResolver{
                 
             }
         }
+
+        /*
+            Insert using QueryBuilder(TypeORM)
+
+            const hashedPassword = await argon2.hash(options.password);
+            let user;
+            try{ 
+                const result = await getConnection()
+                    .createQueryBuilder()
+                    .insert()
+                    .into(User)
+                    .values({
+                        username: options.username, 
+                        email: options.email , 
+                        password:hashedPassword
+                    }).returning("*").execute();
+                console.log("result",result);
+                user = result.raw[0]; // For info check console.log("result",result);
+            }catch(err){
+                ...(CONTINUED)
+            }
+
+
+        */
 
         // store user id session
         // this will set a cookie on the user
@@ -298,23 +345,22 @@ export class UserResolver{
         @Arg('options',()=> UsernamePasswordInput) options:UsernamePasswordInput,
         @Ctx() ctx:MyContext
     ):Promise<UserResponse> {
-        
 
         // Important for frontend so that nextjs could show appropriate errors
-        const userForUsername = await ctx.em.findOne(User,{username:options.username});
-        if(!userForUsername){
+        const userSearchedForUsername = await User.findOne({username:options.username})
+        // console.log(userSearchedForUsername); show undefined when userSearchedForUsername not found
+        if(!userSearchedForUsername){
             return{
                 errors:[{
                     field:"username",
                     message:"that username does not exist "
-
                 }]
             };
         }
 
         // Important for frontend so that nextjs could show appropriate errors 
-        const userForEmail = await ctx.em.findOne(User,{email:options.email});
-        if(!userForEmail){
+        const userSearchedForEmail = await User.findOne({email:options.email})
+        if(!userSearchedForEmail){
             return{
                 errors:[{
                     field:"email",
@@ -324,7 +370,32 @@ export class UserResolver{
             };
         }
         
-        const valid = await argon2.verify(userForEmail.password,options.password);
+
+        // // Important for frontend so that nextjs could show appropriate errors
+        // const userSearchedForUsername = await ctx.em.findOne(User,{username:options.username});
+        // if(!userSearchedForUsername){
+        //     return{
+        //         errors:[{
+        //             field:"username",
+        //             message:"that username does not exist "
+
+        //         }]
+        //     };
+        // }
+
+        // // Important for frontend so that nextjs could show appropriate errors 
+        // const userSearchedForEmail = await ctx.em.findOne(User,{email:options.email});
+        // if(!userSearchedForEmail){
+        //     return{
+        //         errors:[{
+        //             field:"email",
+        //             message:"that email does not exist "
+
+        //         }]
+        //     };
+        // }
+        
+        const valid = await argon2.verify(userSearchedForEmail.password,options.password);
         if(!valid){
             return{
                 errors:[{
@@ -336,13 +407,13 @@ export class UserResolver{
 
         // When successfully logged in, we make a userId property in session and set it to user.id
         // With this step, cookie is also created and saved in the browser
-        ctx.req.session.userId = userForEmail.id;
+        ctx.req.session.userId = userSearchedForEmail.id;
         // ctx.req.session.randomProperty = "Ben is cool";
 
 
         
         return {
-            user: userForEmail,
+            user: userSearchedForEmail,
         };
     }
     @Mutation(() => Boolean)
