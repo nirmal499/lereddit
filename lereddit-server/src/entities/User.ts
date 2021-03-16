@@ -1,6 +1,7 @@
 // import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
 import { Field, ObjectType } from "type-graphql";
-import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BaseEntity, Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Post } from "./Post";
 
 
 /**
@@ -16,6 +17,22 @@ import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, U
    @PrimaryGeneratedColumn()
    id!: number;
  
+   
+   @Field()
+   @Column({type:'text',unique:true})
+   username!: string;
+   
+   @Field()
+   @Column({type:'text',unique:true})
+   email!: string;
+   
+   @Column({type:'text'})
+   password!: string;
+
+   // One to Many because we want array of posts to be associated with user
+   @OneToMany(() => Post, post => post.creator)
+   posts: Post[];
+
    @Field()
    @CreateDateColumn()
    createdAt: Date;
@@ -23,18 +40,6 @@ import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, U
    @Field()
    @UpdateDateColumn()
    updatedAt: Date;
- 
-   @Field()
-   @Column({type:'text',unique:true})
-   username!: string;
- 
-   @Field()
-   @Column({type:'text',unique:true})
-   email!: string;
- 
-   @Column({type:'text'})
-   password!: string;
- 
  }
 
 // @ObjectType()

@@ -5,6 +5,25 @@ import { LoginMutation, LogoutMutation, MeDocument, MeQuery, RegisterMutation} f
 
 import { betterUpdateQuery } from "./betterUpdateQuery";
 
+import { pipe, tap } from 'wonka';
+import { Exchange } from 'urql';
+import  Router  from 'next/router';
+
+// An exchange for all errors :-  https://github.com/FormidableLabs/urql/issues/225
+// Global Error handling (WHEN AN ERROR IS THROWN ANYWHERE IT IS HANDLED HERE)
+export const errorExchange: Exchange = ({ forward }) => ops$ => {
+  return pipe(
+    forward(ops$),
+    tap(({ error }) => {
+      if (error) {
+        if(error?.message.includes('Not Authenticated')){
+          Router.replace("/login");
+        }
+      }
+    })
+  );
+};
+
 export const createUrqlClient = (ssrExchange: any) => 
 ({
     url: 'http://localhost:4000/graphql',
@@ -67,5 +86,5 @@ export const createUrqlClient = (ssrExchange: any) =>
         },
       }, 
     },
-  }), ssrExchange ,fetchExchange],
+  }), errorExchange,ssrExchange ,fetchExchange],
 });

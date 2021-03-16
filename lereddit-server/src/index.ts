@@ -53,6 +53,12 @@ const main = async () =>{
         entities:[Post,User]
     })
 
+    /**
+     * To delete all the Post just make synchronize to false
+     * and then uncomment this line
+     */
+    // await Post.delete({})
+
     //const orm = await MikroORM.init(microConfig);
 
     // Deleting all our users

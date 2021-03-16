@@ -20,7 +20,7 @@ const Login: React.FC<LoginProps> = ({})=>{
 
     // we can access the router using this hook
     const router = useRouter();
-
+    //console.log(router);
 
     // useLoginMutation is the hook created by graphql-code-generator
     const [{},login] = useLoginMutation();
@@ -38,8 +38,13 @@ const Login: React.FC<LoginProps> = ({})=>{
                 if(response.data?.login.errors){
                     setErrors(toErrorMap(response.data.login.errors));
                 }else if(response.data?.login.user){
-                    // It worked means no errors
-                    router.push("/");
+                    if(typeof router.query.next === 'string'){
+                        // It worked means no errors
+                        router.push(router.query.next || "/");
+
+                    }else{
+                        router.push("/");
+                    }
 
                 }
             }}>

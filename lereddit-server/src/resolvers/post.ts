@@ -1,6 +1,17 @@
 import { Post } from '../entities/Post'
 //import { MyContext } from 'src/types'
-import {Arg, Int, Mutation, Query} from 'type-graphql'
+import {Arg, Ctx, Field, InputType, Int, Mutation, Query, UseMiddleware} from 'type-graphql'
+import { MyContext } from 'src/types';
+import { isAuth } from '../middleware/isAuth';
+
+@InputType()
+class PostInput{
+    @Field()
+    title: string
+
+    @Field()
+    text: string
+}
 
 export class PostResolver{
     // All Posts
@@ -21,11 +32,20 @@ export class PostResolver{
     //     return ctx.em.findOne(Post,{id});
     // }
 
-    // Creating Post and returning that created Post 
+    // Creating Post and returning that created Post
+    // By using middleware isAuth : It will throw an error if user tries to create post without logging in
     @Mutation(()=> Post)
-    createPost( @Arg('title',()=> String) title: string): Promise<Post>{
+    @UseMiddleware(isAuth)
+    createPost(
+        @Arg('input',()=> PostInput) input: PostInput,
+        @Ctx() ctx:MyContext
+        ): Promise<Post>{
+
         // This is actually gonna use 2 sql queries
-        return Post.create({title}).save();
+        return Post.create({
+            ...input,
+            creatorId: ctx.req.session.userId
+        }).save();
     }
 
     // async createPost( @Arg('title',()=> String) title: string,@Ctx() ctx:MyContext): Promise<Post>{

@@ -12,8 +12,9 @@ import { toErrorMap } from '../../utils/toErrorMap';
 import NextLink  from "next/link";
 
 
-const ChangePassword: NextPage<{ token?: string}> = ({ token }) => {
+const ChangePassword: NextPage<{ /*token?: string*/}> = ({ /*token*/ }) => {
     const router = useRouter();
+    // console.log(router);
     const [{},changePassword] = useChangePasswordMutation();
     const [tokenError,setTokenError] = useState('');
 
@@ -28,8 +29,11 @@ const ChangePassword: NextPage<{ token?: string}> = ({ token }) => {
                  * You can now use the non-null assertion operator (!) that is here exactly for your use case.
                  * It tells TypeScript that even though something looks like it could be null, it can trust you that it's not
                  */
-                const tokenRecieved = token!;
-                const response = await changePassword({token:tokenRecieved, newPassword: values.newPassword})
+                // const tokenRecieved = token!;
+                const response = await changePassword({
+                    token:/*tokenRecieved*/ typeof router.query.token == 'string' ? router.query.token : "",
+                    newPassword: values.newPassword
+                })
 
                 /**
                  * The errors that we are getting back from graqhql is an array that look like this
@@ -77,10 +81,10 @@ const ChangePassword: NextPage<{ token?: string}> = ({ token }) => {
 
 // Special function provided by NextJS
 // This allows us to get any query parameter and pass it to the above component
-ChangePassword.getInitialProps = ({query}) => {
-    return {
-        token: query.token as string,
-    };
-};
+// ChangePassword.getInitialProps = ({query}) => {
+//     return {
+//         token: query.token as string,
+//     };
+// };
 
 export default withUrqlClient(createUrqlClient)(ChangePassword);

@@ -1,7 +1,8 @@
 //import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
 
 import { Field, ObjectType } from "type-graphql";
-import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BaseEntity, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { User } from "./User";
 
 /**
  * We converted this class from Entity() type to ObjectType() for GRAPHQL Query
@@ -18,17 +19,36 @@ export class Post extends BaseEntity{
   id!: number;
 
   @Field()
+  @Column({type:'text'})
+  title!: string;
+
+  @Field()
+  @Column()
+  text!: string;
+
+  @Field()
+  @Column({type:'int',default:0})
+  points!: number;
+
+  // Foreign Key will be stored in creatorId
+  @Field()
+  @Column()
+  creatorId: number;
+
+  /***
+   * Many-to-one is a relation where A contains multiple instances of B, but B contains only one instance of A.
+   * User can have multiple posts, but each post is owned by only one single user
+   */
+  @ManyToOne(() => User, user => user.posts)
+  creator: User;
+  
+  @Field()
   @CreateDateColumn()
   createdAt: Date;
 
   @Field()
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @Field()
-  @Column({type:'text'})
-  title!: string;
-
 }
 
 // @ObjectType()
