@@ -22,6 +22,7 @@ import { MyContext } from "./types";
 import {createConnection} from 'typeorm'
 import { User } from "./entities/User";
 import { Post } from "./entities/Post";
+import path from "path";
 
 dotenv.config({
     path:'config.env'
@@ -50,8 +51,12 @@ const main = async () =>{
         password: process.env.DBPASS,
         logging:true,
         synchronize:true, // No need to do migration ,it will automatically create tables (do the migrations for you)
+        migrations:[path.join(__dirname,"./migrations/*")],// We are using it now for dummy data
         entities:[Post,User]
     })
+
+    // Running migrations that have not been run (We are using it now for inserting dummy data (FakePosts))
+    await conn.runMigrations();
 
     /**
      * To delete all the Post just make synchronize to false

@@ -1,6 +1,6 @@
 
-import {dedupExchange, fetchExchange} from 'urql';
-import { cacheExchange} from '@urql/exchange-graphcache';
+import {dedupExchange, fetchExchange, stringifyVariables} from 'urql';
+import { cacheExchange, Resolver} from '@urql/exchange-graphcache';
 import { LoginMutation, LogoutMutation, MeDocument, MeQuery, RegisterMutation} from '../generated/graphql';
 
 import { betterUpdateQuery } from "./betterUpdateQuery";
@@ -24,6 +24,125 @@ export const errorExchange: Exchange = ({ forward }) => ops$ => {
   );
 };
 
+
+export const cursorPagination = (): Resolver => {
+  
+
+  return (_parent, fieldArgs, cache, info) => {
+    const { parentKey: entityKey, fieldName } = info;
+
+    // Output : entityKey outputs Query, fieldName outputs posts
+    //console.log(entityKey,fieldName);// Output: Query posts
+
+    // inspectFields(entityKey) will get all the fields in the stored cache under this Query (entityKey outputs Query)
+    const allFields = cache.inspectFields(entityKey);
+
+    //console.log("allFields: ",allFields);
+
+    const fieldInfos = allFields.filter(info => info.fieldName === fieldName);
+    const size = fieldInfos.length;
+    if (size === 0) {
+      return undefined;
+    }
+
+    //console.log("fieldArgs: ",fieldArgs);
+    const fieldKey = `${fieldName}(${stringifyVariables(fieldArgs)})`;
+    //console.log("Key we created: ",)
+
+    const isItInTheCache = cache.resolve(cache.resolve(entityKey,fieldKey) as string,"posts");
+
+    //console.log("isItInTheCache: ",isItInTheCache);
+    info.partial = !isItInTheCache;
+    //console.log("Partial: ",info.partial);
+
+    let hasMore = true;
+    let results:string[] = [];
+    fieldInfos.forEach(fi => {
+      // https://formidable.com/open-source/urql/docs/api/graphcache/
+      // resolveFieldByKey is deprecated 
+      const key = cache.resolve(entityKey,fi.fieldKey) as string;
+      //console.log("key: ",key);
+      const data = cache.resolve(key,'posts') as string[];
+      //console.log("posts: ",data);
+      const _hasMore = cache.resolve(key,'hasMore');
+      //console.log("_hasMore: ",_hasMore);
+
+      if(_hasMore){
+        hasMore = _hasMore as boolean;
+      }
+
+      //console.log("data",hasMore,data);
+      results.push(...data);
+    });
+
+    const obj = {
+      __typename:"PaginatedPosts",
+      hasMore: hasMore,
+      posts: results
+    };
+    
+    //console.log("Thing returned: ",obj);
+
+    return obj;
+    
+
+    // const visited = new Set();
+    // let result: NullArray<string> = [];
+    // let prevOffset: number | null = null;
+
+    // for (let i = 0; i < size; i++) {
+    //   const { fieldKey, arguments: args } = fieldInfos[i];
+    //   if (args === null || !compareArgs(fieldArgs, args)) {
+    //     continue;
+    //   }
+
+    //   const links = cache.resolve(entityKey, fieldKey) as string[];
+    //   const currentOffset = args[offsetArgument];
+
+    //   if (
+    //     links === null ||
+    //     links.length === 0 ||
+    //     typeof currentOffset !== 'number'
+    //   ) {
+    //     continue;
+    //   }
+
+    //   const tempResult: NullArray<string> = [];
+
+    //   for (let j = 0; j < links.length; j++) {
+    //     const link = links[j];
+    //     if (visited.has(link)) continue;
+    //     tempResult.push(link);
+    //     visited.add(link);
+    //   }
+
+    //   if (
+    //     (!prevOffset || currentOffset > prevOffset) ===
+    //     (mergeMode === 'after')
+    //   ) {
+    //     result = [...result, ...tempResult];
+    //   } else {
+    //     result = [...tempResult, ...result];
+    //   }
+
+    //   prevOffset = currentOffset;
+    // }
+
+    // const hasCurrentPage = cache.resolve(entityKey, fieldName, fieldArgs);
+    // if (hasCurrentPage) {
+    //   return result;
+    // } else if (!(info as any).store.schema) {
+    //   return undefined;
+    // } else {
+    //   info.partial = true;
+    //   return result;
+    // }
+  };
+};
+
+
+
+
 export const createUrqlClient = (ssrExchange: any) => 
 ({
     url: 'http://localhost:4000/graphql',
@@ -33,6 +152,18 @@ export const createUrqlClient = (ssrExchange: any) =>
   },
   // Graphcache
   exchanges: [dedupExchange, cacheExchange({
+
+    keys:{
+      PaginatedPosts: () => null
+    },
+    // This will run whenever the Query is run and then we can alter how the query results look
+    resolvers:{
+      Query:{
+        // posts.graphql
+        posts: cursorPagination(),
+      }
+    },
+
     // Graphcache -> Cache Updates
     updates: {
       /* This is going to run whenever our register and login mutation runs and it just gonna update the cache

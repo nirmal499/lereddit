@@ -1,8 +1,9 @@
 import { Post } from '../entities/Post'
 //import { MyContext } from 'src/types'
-import {Arg, Ctx, Field, InputType, Int, Mutation, Query, UseMiddleware} from 'type-graphql'
+import {Arg, Ctx, Field, FieldResolver, InputType, Int, Mutation, ObjectType, Query, Resolver, Root, UseMiddleware} from 'type-graphql'
 import { MyContext } from 'src/types';
 import { isAuth } from '../middleware/isAuth';
+import { getConnection } from 'typeorm';
 
 @InputType()
 class PostInput{
@@ -13,11 +14,62 @@ class PostInput{
     text: string
 }
 
+@ObjectType()
+class PaginatedPosts{
+    @Field(()=> [Post])
+    posts: Post[]
+
+    @Field()
+    hasMore: Boolean;
+}
+
+@Resolver(Post)
 export class PostResolver{
+
+    @FieldResolver(()=> String)
+    textSnippet(
+        @Root() root: Post
+    ){
+        return root.text.slice(0,50);
+    }
+
+
     // All Posts
-    @Query(()=> [Post])
-    posts( /* @Ctx() ctx:MyContext */ ): Promise<Post[]>{
-        return Post.find();
+    @Query(()=> PaginatedPosts)
+    async posts( /* @Ctx() ctx:MyContext */
+        @Arg('limit',() => Int) limit:number,
+        // When we set something to nullable we need to explicitly set the types her ()=> String
+        @Arg('cursor',()=> String, {nullable:true}) cursor:string
+    ): Promise<PaginatedPosts>{
+
+        //return Post.find();
+
+
+        /***
+         * Let say the user asked for (realLimit)20 posts, so we fetch upto (realLimitPlusOne)21 posts
+         * posts.slice(0,realLimit) will slice it upto 20 posts since we don't wanna give them more than they asked for
+         * posts.length === realLimitPlusOne we are checking whether we have more posts or not
+         */
+        const realLimit = Math.min(50,limit);
+        const realLimitPlusOne = realLimit + 1;
+        //Using Query Builder
+        const qb =  getConnection()
+        .getRepository(Post)
+        .createQueryBuilder("p")
+        .orderBy('"createdAt"',"DESC")
+        .take(realLimitPlusOne);
+
+        if(cursor){
+            qb.where('"createdAt" < :cursor', { cursor: new Date(cursor) })
+        }
+
+        const posts = await qb.getMany();
+        return {
+            posts: posts.slice(0,realLimit),
+            hasMore: posts.length === realLimitPlusOne
+        };
+
+
         //return ctx.em.find(Post,{});
     }
 

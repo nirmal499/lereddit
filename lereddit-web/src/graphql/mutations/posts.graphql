@@ -1,8 +1,16 @@
-query Posts {
-  posts {
-    id
-    createdAt
-    updatedAt
-    title
+query Posts($limit: Int!, $cursor: String) {
+  posts(limit: $limit, cursor: $cursor) {
+    hasMore
+    posts {
+      id
+      createdAt
+      updatedAt
+      title
+      textSnippet
+    }
   }
 }
+
+# In graphQL Int! means value is needed of type Int
+# And String! means value is needed of type String
+# And String means value optional(can be or cannot br given by the user ) of type String
