@@ -39,6 +39,7 @@ export class Post extends BaseEntity{
    * Many-to-one is a relation where A contains multiple instances of B, but B contains only one instance of A.
    * User can have multiple posts, but each post is owned by only one single user
    */
+  @Field()
   @ManyToOne(() => User, user => user.posts)
   creator: User;
   
